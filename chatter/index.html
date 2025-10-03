@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>We shall talk</title>
+  <!-- Firebase libraries -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <style>
+    /* Reset margins/padding and set full viewport background */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
+	  background-color:aqua;
+      overflow-x: hidden;
+    }
+    /* Token Login Container: center it on screen */
+    #login-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      width: 90%;
+      max-width: 400px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      text-align: center;
+      z-index: 10;
+    }
+    /* Chat Container: 60% width, centered, 80vh height; hidden before login */
+    #chat-container {
+      display: none; /* Hidden until login */
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60%;
+      height: 80vh;
+      background: white;
+      flex-direction: column;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    /* Chat Header with flex centering */
+    #chat-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+      height: 40px;
+      background: #eee;
+      border-bottom: 1px solid #ddd;
+      flex: 0 0 auto;
+      position: relative;
+    }
+    #chat-header h2 {
+      margin: 0;
+    }
+    #clearChatButton {
+      position: absolute;
+      top: 5px;
+      right: 10px;
+      padding: 6px 10px;
+      cursor: pointer;
+      border: none;
+      background: #dc3545;
+      color: white;
+      border-radius: 3px;
+      font-size: 0.8em;
+    }
+    /* Messages Area */
+    #messages {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    /* Input Area */
+    #input-area {
+      flex: 0 0 auto;
+      padding: 10px;
+      border-top: 1px solid #ddd;
+      background: #eee;
+      display: flex;
+    }
+    /* Textarea for multi-line input */
+    #messageInput {
+      flex: 1;
+      padding: 8px;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      resize: none;
+      overflow-wrap: break-word;
+      font-size: 16px;
+      line-height: 1.5;
+      font-family: Arial, sans-serif;
+      backface-visibility: hidden;
+      -webkit-font-smoothing: subpixel-antialiased;
+      transform: translateZ(0);
+      will-change: transform;
+    }
+    #sendButton {
+      padding: 8px 12px;
+      cursor: pointer;
+      border: none;
+      background: #007bff;
+      color: white;
+      border-radius: 3px;
+    }
+    /* Message Styling */
+    .message {
+      margin-bottom: 8px;
+      max-width: 70%;
+      border-radius: 5px;
+      word-wrap: break-word;
+    }
+    .friend-message {
+      background: #e0ffe0;
+      align-self: flex-start;
+      text-align: left;
+      padding: 8px;
+    }
+    /* Your message wrapper */
+    .my-message-wrapper {
+      position: relative;
+      align-self: flex-end;
+      margin-bottom: 8px;
+    }
+    .my-message {
+      background: #e0f7ff;
+      text-align: right;
+      padding: 8px;
+      border-radius: 5px;
+      position: relative;
+    }
+    .message-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .message-text {
+      display: block;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: break-all;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+    .read-ticks {
+      margin-left: 5px;
+      color: green;
+      font-size: 0.9em;
+    }
+    /* Floating Actions Container (for edit/delete) */
+    #floatingActions {
+      position: fixed;
+      display: none;
+      z-index: 1000;
+      flex-direction: row;
+      gap: 5px;
+    }
+    #floatingActions button {
+      pointer-events: auto;
+      padding: 4px 6px;
+      font-size: 0.7em;
+      border: 1px solid black;
+      border-radius: 5px;
+      cursor: pointer;
+      background-color: #f0f0f0;
+    }
+    /* Typing Indicator */
+    #typing-indicator {
+      padding: 5px;
+      font-style: italic;
+      color: #888;
+      text-align: center;
+      background: #fff;
+      border-top: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <!-- Token Login Container -->
+  <div id="login-container">
+    <h2>Token Sign-In</h2>
+    <p>Enter your token:</p>
+    <input type="text" id="tokenInput" placeholder="Enter token here">
+    <br><br>
+    <button id="tokenLoginButton">Login</button>
+  </div>
+  
+  <!-- Centered Chat Container (hidden before login) -->
+  <div id="chat-container">
+    <div id="chat-header">
+      <h2>My Waste Fellow</h2>
+      <button id="clearChatButton">Clear Chat</button>
+    </div>
+    <div id="messages"></div>
+    <div id="typing-indicator"></div>
+    <div id="input-area">
+      <textarea id="messageInput" placeholder="Type a message..." rows="2"></textarea>
+      <button id="sendButton">Send</button>
+    </div>
+  </div>
+  
+  <!-- Floating Actions Container (for edit/delete buttons) -->
+  <div id="floatingActions"></div>
+  
+  <script>
+    let userId, friendId, messages = [], status = {};
+    const MSG_POLL    = 2000;
+    const STATUS_POLL = 1000;
+
+    // parse/serialize helpers (same as before)
+    function parseMessages(txt) {
+    return txt
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && line.split('|').length === 5)
+        .map(line => {
+        const [ id, sender, ts, enc, rd ] = line.split('|');
+        return {
+            id,
+            sender,
+            timestamp: ts,
+            text:   decodeURIComponent(enc),
+            read:   rd === 'true'
+        };
+        });
+    }
+    function serializeMessages(arr) {
+        return arr.map(m=>
+        [m.id,m.sender,m.timestamp,
+        encodeURIComponent(m.text),m.read].join('|')
+        ).join('\n');
+    }
+    function parseStatus(txt) {
+        if (!txt.trim()) return {};
+        return Object.fromEntries(
+        txt.trim().split('\n').map(l=>l.split(':'))
+                    .map(([u,f])=>[u, f==='true'] )
+        );
+    }
+    function serializeStatus(obj) {
+        return Object.entries(obj).map(([u,f])=>u+':'+f).join('\n');
+    }
+
+    // load/save via fetch
+    async function loadMessages() {
+        const r = await fetch('/api/messages');
+        messages = parseMessages(await r.text());
+    }
+    async function saveMessages() {
+        await fetch('/api/messages',{
+        method:'POST',
+        headers:{'Content-Type':'text/plain'},
+        body: serializeMessages(messages)
+        });
+    }
+    async function loadStatus() {
+        const r = await fetch('/api/status');
+        status = parseStatus(await r.text());
+    }
+    async function saveStatus() {
+        await fetch('/api/status',{
+        method:'POST',
+        headers:{'Content-Type':'text/plain'},
+        body: serializeStatus(status)
+        });
+    }
+
+    // render chat bubbles
+    function renderMessages() {
+        const M = document.getElementById('messages');
+        M.innerHTML = '';
+        messages.forEach(m=>{
+        if (m.sender===userId) {
+            const w = document.createElement('div');
+            w.className = 'my-message-wrapper';
+            const b = document.createElement('div');
+            b.className = 'my-message';
+            const c = document.createElement('div');
+            c.className = 'message-content';
+            const t = document.createElement('span');
+            t.className = 'message-text';
+            t.textContent = m.text;
+            c.appendChild(t);
+            if (m.read) {
+            const ticks = document.createElement('span');
+            ticks.className = 'read-ticks';
+            ticks.textContent = '✔✔';
+            c.appendChild(ticks);
+            }
+            b.appendChild(c);
+            w.appendChild(b);
+            M.appendChild(w);
+        } else {
+            const d = document.createElement('div');
+            d.className = 'message friend-message';
+            const c = document.createElement('div');
+            c.className = 'message-content';
+            const t = document.createElement('span');
+            t.className = 'message-text';
+            t.textContent = m.text;
+            c.appendChild(t);
+            d.appendChild(c);
+            M.appendChild(d);
+        }
+        });
+        M.scrollTop = M.scrollHeight;
+    }
+
+    // polling loops
+    async function pollMessages() {
+        await loadMessages();
+        let dirty = false;
+        messages.forEach(m=>{
+        if (m.sender!==userId && !m.read) {
+            m.read = true;
+            dirty = true;
+        }
+        });
+        if (dirty) await saveMessages();
+        renderMessages();
+    }
+    async function pollStatus() {
+        await loadStatus();
+        document.getElementById('typing-indicator').textContent =
+        status[friendId] ? 'Typing…' : '';
+    }
+
+    // wire up login
+    document.getElementById('tokenLoginButton')
+        .addEventListener('click', async ()=>{
+        const t = document.getElementById('tokenInput').value.trim();
+        if (t==='SuHAS') { userId='user1'; friendId='user2'; }
+        else if (t==='ArAdHaNa') { userId='user2'; friendId='user1'; }
+        else return alert('Invalid token.');
+
+        document.getElementById('login-container').style.display = 'none';
+        document.getElementById('chat-container').style.display = 'flex';
+
+        await pollMessages(); await pollStatus();
+        setInterval(pollMessages, MSG_POLL);
+        setInterval(pollStatus, STATUS_POLL);
+        });
+
+    // send message
+    async function sendMessage() {
+        const inp = document.getElementById('messageInput');
+        const txt = inp.value.trim();
+        if (!txt) return;
+        inp.value = '';
+        const id  = Date.now().toString();
+        const iso = new Date().toISOString();
+        messages.push({ id, sender:userId, timestamp:iso, text:txt, read:false });
+        await saveMessages();
+        renderMessages();
+    }
+    document.getElementById('sendButton').addEventListener('click', sendMessage);
+    document.getElementById('messageInput')
+        .addEventListener('keydown', e=>{
+        if (e.key==='Enter' && !e.shiftKey) {
+            e.preventDefault(); sendMessage();
+        }
+        });
+
+    // typing indicator
+    let typTO;
+    document.getElementById('messageInput')
+        .addEventListener('input', ()=>{
+        status[userId] = true;
+        saveStatus();
+        clearTimeout(typTO);
+        typTO = setTimeout(()=>{
+            status[userId] = false;
+            saveStatus();
+        }, 1000);
+        });
+
+    // clear chat
+    document.getElementById('clearChatButton')
+        .addEventListener('click', async ()=>{
+        if (!confirm('Really clear all messages?')) return;
+        messages = [];
+        await saveMessages();
+        renderMessages();
+        });
+  </script>
+</body>
+</html>
